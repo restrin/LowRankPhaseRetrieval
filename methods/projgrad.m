@@ -1,4 +1,4 @@
-function [W,track] = projgrad(prob,opts)
+function [y,track] = projgrad(prob,opts)
 % Prob:
 %    A, b, m, n, orig
 % Opts:
@@ -13,7 +13,7 @@ function [W,track] = projgrad(prob,opts)
 %       y0       - default: 0
 %       explicit - default: true
 %       symm     - default: false
-%       callback - stop = opts.callback(y, iter, vmax, prob);
+%       callback - stop = opts.callback(y, iter, obj, vmax, prob);
 
 m = prob.m;
 n = prob.n;
@@ -46,9 +46,10 @@ else
     callback = @(y, iter, vmax, prob) false;
 end
 
+yfull = ybar;
 for iter = 1:opts.maxiter
     
-    [W,~] = opA(prob.A,y+ybar,true,explicit,false,opts.sampling_scheme);
+    [W,~] = opA(prob.A,yfull,true,explicit,false,opts.sampling_scheme);
     
     if explicit
         [V,D] = eig(W,'vector');
@@ -57,9 +58,7 @@ for iter = 1:opts.maxiter
     else
         [vmax,objval] = eigs(W,n,1,'la',eigopts);
     end
-    
-%    track.eiggap(iter,:) = D;
-%    eiggap = D(1)-D(2);
+
     track.obj(iter) = objval;
     
     ygrad = (prob.A*vmax).^2;
@@ -68,11 +67,17 @@ for iter = 1:opts.maxiter
     y = y - ((y'*b)/(b'*b)*b);
     
     opts.stepsize = opts.stepsize*opts.stepsize_decay;
-    stop = callback(y, iter, objval, vmax, prob);
+    
+    yfull = y+ybar;
+    stop = callback(yfull, iter, objval, vmax, prob);
     
     if stop
         break;
     end
     
 end
+
+% Return final dual iterate
+y = yfull;
+
 end

@@ -1,6 +1,7 @@
 function im_rec = recover_image(u, opts)
 % Options:
 %   opts.orig   - original image
+%   opts.show   - plot image?
 %   opts.fignum - figure number
 %   opts.obj    - objective value
 %   opts.n1, opts.n2 - image size
@@ -25,8 +26,10 @@ function im_rec = recover_image(u, opts)
         im_rec = 1-im_rec;
     end
     
-    if isfield(opts,'fignum')
-        figure(opts.fignum)
+    if isfield(opts,'show') && opts.show
+        if isfield(opts, 'fignum')
+            figure(opts.fignum)
+        end
         clf
         if isfield(opts,'orig')
             subplot(2,1,1)
