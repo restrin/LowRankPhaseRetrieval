@@ -65,6 +65,14 @@ function [y,idx] = opA(A, x, transpose, explicit, isfactor, opts)
             end
         end
 
+        % Even though y is symmetric, roundoff error makes MATLAB think its
+        % nonsymmetric which makes eig slow
+        % We can re-write y=A'*(x.*A) to
+        %    sx = sqrt(x)
+        %    sxA = sx.*A
+        %    y = sxA'*sxA
+        % MATLAB should think that the operator is symmetric then
+        % Unclear which is more expensive
         if explicit && isfield(opts,'symm') && opts.symm
             y = (y+y')/2;
         end
