@@ -6,16 +6,15 @@ clear
 imagename = 'logo_ubc'; n = 5220; m = 15000;
 
 %% Choose methods to use
-% Available methods: projgrad, redgrad, coord, wf
+% Available methods: projgrad, redgrad, coord
 methodvec = [{'projgrad'}];
 % Available sample types for projgrad and redgrad:
 %    full, pos, topk
 sampletypevec = [{'full'}];
 
-%% Set options (user defined)
+%% Set options for initialization method (user defined)
 
 callbackopts.checkperiod = 1;
-callbackopts.saveperiod = 1;callbackopts.checkperiod = 1;
 callbackopts.saveperiod = 1;
 % Compute image during callback (aka compute top eigenvector)?
 % Can be set to false for wf/projgrad/redgrad using full sampling
@@ -33,15 +32,30 @@ opts.sampling_scheme.symm = true;
 opts.explicit = false;
 
 % Total iterations (epochs for coord)
-opts.maxiter = 50;
-opts.stepsize = 1e-9;
-opts.stepsize_decay = 0.99;
+if strcmpi(methodvec(1), 'projgrad')
+    opts.maxiter = 10;
+    opts.stepsize = 5*1e-9;
+elseif strcmpi(methodvec(1), 'redgrad')
+    opts.maxiter = 8;
+    opts.stepsize = 5*1e-5;
+elseif strcmpi(methodvec(1), 'coord')
+    opts.maxiter = 1;
+    opts.stepsize = 1e-8;
+end
+opts.stepsize_decay = 1;
 
 % Coordinate descent specific
 opts.rank = 10;
 opts.recycle = 5*m;
 opts.sample_strat = 'greedy';
 opts.alpha = 0.1;
+
+%% Set options for Wirtinger Flow
+wfopts.maxiter = 3000;
+wfopts.stepsize = 5*1e-6;
+wfopts.stepsize_decay = 1;
+
+wfopts.explicit = opts.explicit;
 
 %% Set some more stuff
 eigopts.issym = true; 
@@ -58,6 +72,8 @@ load(sprintf('data/%s_prob_n%d_m%d.mat',imagename,n,m), 'prob')
 prob.b = [prob.b(imax); prob.b(1:imax-1); prob.b(imax+1:end)];
 prob.A = [prob.A(imax,:); prob.A(1:imax-1,:); prob.A(imax+1:end,:)];
 
+y = prob.b/(prob.b'*prob.b);
+
 %% Create figure and start running
 figure;
 
@@ -65,11 +81,6 @@ for mti = 1:length(methodvec)
     method = methodvec{mti};
     for sti = 1:length(sampletypevec)
         sampletype = sampletypevec{sti};
-
-        %% wirtinger flow
-        if strcmpi(method,'wf')
-            [u,track] = wirtinger_flow(prob, opts, []);
-        end
         
         %% projected gradient descent
         if strcmpi(method,'projgrad')
@@ -90,6 +101,23 @@ for mti = 1:length(methodvec)
         
     end
 end
+fprintf('Finished initialization\n');
+
+%% wirtinger flow
+[W,~] = opA(prob.A,y,true,opts.explicit,false,struct('type', 'full', 'symm', true));
+
+if opts.explicit
+    [V,D] = eig(W,'vector');
+    [~, jmax] = max(D);
+    ustart = V(:,jmax);
+else
+    [ustart,~] = eigs(W,prob.n,1,'la',eigopts);
+end       
+
+callbackopts.recompute = false;
+wfopts.callback = @(y, iter, obj, vmax, prob) callback(y, iter, obj, vmax, prob, callbackopts);
+fprintf('Starting Wirtinger-Flow...\n');
+[u,track] = wirtinger_flow(prob, wfopts, ustart);
 
 %% Define callback function
 function stop = callback(y, iter, obj, vmax, prob, opts)
