@@ -7,10 +7,10 @@ imagename = 'logo_ubc'; n = 5220; m = 15000;
 
 %% Choose methods to use
 % Available methods: projgrad, redgrad, coord
-methodvec = [{'projgrad'}];
+methodvec = [{'redgrad'}];
 % Available sample types for projgrad and redgrad:
 %    full, pos, topk
-sampletypevec = [{'full'}];
+sampletypevec = [{'pos'}];
 
 %% Set options for initialization method (user defined)
 
@@ -33,7 +33,7 @@ opts.explicit = false;
 
 % Total iterations (epochs for coord)
 if strcmpi(methodvec(1), 'projgrad')
-    opts.maxiter = 10;
+    opts.maxiter = 8;
     opts.stepsize = 5*1e-9;
 elseif strcmpi(methodvec(1), 'redgrad')
     opts.maxiter = 8;
