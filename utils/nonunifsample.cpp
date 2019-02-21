@@ -1,6 +1,7 @@
 #include "mex.h"
 #include <algorithm>
 #include <cstdlib>
+#include <random>
 #include <math.h>
 #include <string.h>
 #include <iostream>
@@ -8,6 +9,8 @@
 static double* prefix_sums = NULL;
 static mwSize* num_elem = NULL;
 static mwSize* tree_size = NULL;
+static std::uniform_real_distribution<> dis;
+static std::mt19937 gen;
 
 void exitFcn()
 {
@@ -28,7 +31,7 @@ void build_prefix_tree(double* weights, int num_elem)
   	prefix_sums[(*tree_size/2)+k] = std::max(weights[k],0.0);
   }
 
-  for( int k=num_elem-1; k >= 0; k-- )
+  for( int k=(*tree_size/2)-1; k >= 0; k-- )
   {
   	prefix_sums[k] = prefix_sums[2*k+1] + prefix_sums[2*k+2];
   }
@@ -83,7 +86,11 @@ void mexFunction( int nlhs, mxArray *plhs[],
   // Command: Init
   if( !strcmp("init", cmd) )
   {
-	mexAtExit(exitFcn);
+	  mexAtExit(exitFcn);
+
+    std::random_device rd;
+    gen = std::mt19937(rd());
+    dis = std::uniform_real_distribution<>(0.0, 1.0);
 
     num_elem = (mwSize*) mxCalloc(1,sizeof(mwSize));
     mexMakeMemoryPersistent(num_elem);
@@ -92,9 +99,9 @@ void mexFunction( int nlhs, mxArray *plhs[],
     mexMakeMemoryPersistent(tree_size);
 
     mwSize m = mxGetM(prhs[1]);
-    *num_elem = m;
 
     *tree_size = (2 << uint(ceil(log2(double(m)))))-1;
+    *num_elem = m;
 
     prefix_sums = (double*) mxCalloc(*tree_size, sizeof(double));
     mexMakeMemoryPersistent(prefix_sums);
@@ -102,14 +109,19 @@ void mexFunction( int nlhs, mxArray *plhs[],
     double* weights = mxGetPr(prhs[1]);
 
     build_prefix_tree(weights, *num_elem);
+
   }
 
   if( !strcmp("sample", cmd) )
   {
-  	double r = mxGetScalar(prhs[1]);
-  	int k = sample(r);
-
-  	plhs[0] = mxCreateDoubleScalar(k);
+    double r;
+  	int numsamples = (int) mxGetScalar(prhs[1]);
+    plhs[0] = mxCreateDoubleMatrix(numsamples, 1, mxREAL);
+    double* k = mxGetPr(plhs[0]);
+    for( int i=0; i<numsamples; i++ ) {
+      r = dis(gen);
+      k[i] = (double) sample(r);
+    }
   }
 
   if( !strcmp("update", cmd) )
