@@ -1,31 +1,38 @@
 function [y,q,track] = coorddescent(prob,opts)
-tic
-% Prob:
-%    A, b, m, n, orig
-% Opts:
-%    Mandatory:
-%       maxiter
-%       sampling_scheme
-%       stepsize
-%       stepsize_decay
-%       checkperiod
-%       saveperiod
-%       rank
-%       recycle  - how often to refresh factorization
-%    Optional:
-%       y0       - default: b/(b'*b)
-%       explicit - default: true
-%       symm     - default: false
-%       callback - stop = opts.callback(y, iter, obj, vmax, prob);
-%       sample_strat - unif (default), greedy
-%       Q0,T0    - initial low-rank factorization
+% COORDDESCENT    Run coordinate descent
+%
+% Input:
+%   prob    Problem instance
+%   opts    Options struct
+%      maxiter          Max number of iteraitons (required)
+%      stepsize         Initial stepsize (required)
+%      stepsize_decay   stepsize *= stepsize_decay every iteration (required)
+%      opAopts          Struct for products with measurement operator (required)
+%      rank             Rank of approximation (required)
+%      recycle          How often factorization is refreshed (required)
+%
+%      y0               Initial y0 (optional, default 0)
+%      explicit         Compute initial point using dense eigendecomposition? (optional, default true)
+%      callback         Callback function taking (y, iter, obj, vmax, prob, opts)
+%                       returns stop = true if solver should exit (optional)
+%      callbackopts     Options struct for callback
+%      sample_strat     Strategy for coordinate sampling, 'unif' or 'greedy' (optional, default 'unif')
+%      alpha            Weight for greedy sampling (optional, default 0.1)
+%      Q0, T0           Initial low-rank factorization (optional)
+%      blocklen         Size of block for update (optional, default 1)
+%
+% Output:
+%   y       Solution
+%   track   Struct containing convergence history
+%      obj      Objective value
 
 m = prob.m;
 n = prob.n;
 b = prob.b;
-b = b / norm(prob.orig(:));
-prob.A = prob.A / m;
-b = b / m;
+% Rescaling (should probably avoid for now)
+%b = b / norm(prob.orig(:));
+%prob.A = prob.A / m;
+%b = b / m;
 y = zeros(m,1);
 if isfield(opts, 'y0')
     ybar = opts.y0;
@@ -59,7 +66,7 @@ Zval = reshape(Zval, 2, size(Zval,1)/2)';
 
 % Make ybar feasible
 res = b'*ybar - 1;
- ybar(i) = ybar(i) - res/b(i);
+ybar(i) = ybar(i) - res/b(i);
 
 %% Set parameters
 if isfield(opts, 'explicit')
@@ -72,8 +79,13 @@ if ~explicit
 end
 if isfield(opts, 'callback')
     callback = opts.callback;
+    if isfield(opts, 'callbackopts')
+        callbackopts = opts.callbackopts;
+    else
+        callbackopts = struct();
+    end
 else
-    callback = @(y, iter, vmax, prob) false;
+    callback = @(y, iter, vmax, prob, opts) false;
 end
 
 if ~isfield(opts, 'sample_strat')
@@ -100,6 +112,7 @@ y = ybar;
 samplestruct = struct;
 samplestruct.type = 'full';
 samplestruct.symm = true;
+samplestruct.explicit = opts.explicit;
 
 if isfield(opts, 'Q0') && isfield(opts, 'T0')
     Q = opts.Q0;
@@ -109,7 +122,7 @@ if isfield(opts, 'Q0') && isfield(opts, 'T0')
     v = real(v);
     Q = Q*v;
 else
-    [W,~] = opA(prob.A,y,true,explicit,false,samplestruct);
+    [W,~] = opA(prob.A,y,true,samplestruct);
     
     if explicit
         [Q,T] = eig(W,'vector');
@@ -130,8 +143,6 @@ jmax = 1;
 iter = 0;
 
 %% Start solving
-track.overhead = toc;
-tic
 for e=1:opts.maxiter
 
     if strcmpi(strat,'unif')
@@ -148,9 +159,9 @@ for e=1:opts.maxiter
             k = nonunifsample('sample', blocklen);
             k = max(k-1,1);
         end
-
+        
         if(mod(iter, opts.recycle) == 0)
-            [W,~] = opA(prob.A,Z*z+ybar,true,explicit,false,samplestruct);
+            [W,~] = opA(prob.A,Z*z+ybar,true,samplestruct);
 
             if explicit
                 [Q,T] = eig(W,'vector');
@@ -186,8 +197,6 @@ for e=1:opts.maxiter
             end
         end
         
-        opts.stepsize = opts.stepsize*opts.stepsize_decay;
-        
         % Update low-rank approximation (will clean up later...)
         l = size(T,1);
         T = [T zeros(l,2*blocklen);
@@ -212,10 +221,11 @@ for e=1:opts.maxiter
         
         
         track.obj(iter) = T(jmax);
-        track.runtime(iter) = toc;
     end
+    
+    opts.stepsize = opts.stepsize*opts.stepsize_decay;
         
-    stop = callback(Z*z+ybar, e, 0, u, prob);
+    stop = callback(Z*z+ybar, e, 0, u, prob, callbackopts);
 	
     if stop
         break;

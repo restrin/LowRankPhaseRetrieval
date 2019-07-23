@@ -1,22 +1,30 @@
-function [y,idx] = opA(A, x, transpose, explicit, isfactor, opts)
-% Options:
-%   opts.type - 'full', 'pos', 'topk'
-%   opts.symm - true or false
+function [y,idx] = opA(A, x, adjoint, opts)
+% OPA   Compute forward operator y = A*x or adjoint y = A'*x
+%
+% Input:
+%   A         m-by-n operator
+%   x         Input vector
+%   adjoint   Compute adjoint operator?
+%   opts      Options struct
+%      type             sampling type for forward operator ('full', 'pos', 'topk')
+%      total_samples    number of samples (for 'topk')
+%      alpha            scaling factor for distribution (0 is uniform, bigger alpha more skewed)
+%      explicit         if adjoint=true, return A'*x as matrix or operator?
+%      symm             if adjoint=true and explicit=true, symmetrize matrix?
+%
+% Output:
+%   y         if adjoint=false, Ax, else, A'*x
+%   idx       indices of sampled entries (nonempty if adjoint=true)
 
     [m,n] = size(A);
     idx = [];
 
-    if ~transpose
-        if isfactor
-            y = sum((A*x).^2,2);
-        else
-            Ax  = A*x;
-            y = sum(Ax.*A,2);
-        end
+    if ~adjoint
+        y = sum((A*x).^2,2);
     else
         if strcmpi(opts.type,'full')
             idx = 1:m;
-            if explicit
+            if opts.explicit
                 y = A'*(x.*A);
             else
                 y = @(v) A'*(x.*(A*v));
@@ -27,7 +35,7 @@ function [y,idx] = opA(A, x, transpose, explicit, isfactor, opts)
 
 %            scal = sum(x) / sum(x(idx));
             
-            if explicit
+            if opts.explicit
                 y = A(idx,:)'*(x(idx).*A(idx,:));
 %                y = scal*y;
             else
@@ -36,12 +44,14 @@ function [y,idx] = opA(A, x, transpose, explicit, isfactor, opts)
             end
 
         elseif strcmpi(opts.type,'topk')
+            % This is gonna be real slow
             idx_bank = find(x > 0);
-            idx = [];
+            num_samples = min(opts.total_samples,length(idx_bank));
+            idx = zeros(num_samples,1);
             
-            for k = 1:min(opts.total_samples,length(idx_bank))
+            for k = 1:num_samples
                 if length(idx_bank) == 1
-                    idx = [idx, idx_bank];
+                    idx = idx_bank;
                     break
                 end
 
@@ -50,13 +60,13 @@ function [y,idx] = opA(A, x, transpose, explicit, isfactor, opts)
                 distr = distr / sum(distr);
 
                 s = randsample(idx_bank,1,true,distr);
-                idx = [idx, s];
+                idx(k) = s;
                 idx_bank = setdiff(idx_bank,s);
             end
 
 %            scal = sum(x) / sum(x(idx));
             
-            if explicit
+            if opts.explicit
                 y = A(idx,:)'*(x(idx).*A(idx,:));
 %                y = scal*y;
             else
@@ -73,7 +83,7 @@ function [y,idx] = opA(A, x, transpose, explicit, isfactor, opts)
         %    y = sxA'*sxA
         % MATLAB should think that the operator is symmetric then
         % Unclear which is more expensive
-        if explicit && isfield(opts,'symm') && opts.symm
+        if opts.explicit && isfield(opts,'symm') && opts.symm
             y = (y+y')/2;
         end
     end

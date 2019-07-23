@@ -1,19 +1,24 @@
-function [y, track] = reduced_grad(prob,opts)
-% Prob:
-%    A, b, m, n, orig
-% Opts:
-%    Mandatory:
-%       maxiter
-%       sampling_scheme
-%       stepsize
-%       stepsize_decay
-%       checkperiod
-%       saveperiod
-%    Optional:
-%       y0       - default: 0
-%       explicit - default: true
-%       symm     - default: false
-%       callback - stop = opts.callback(y, iter, obj, vmax, prob);
+function [y, track] = reducedgrad(prob,opts)
+%REDUCEDGRAD    Run projected gradient
+%
+% Input:
+%   prob    Problem instance
+%   opts    Options struct
+%      maxiter          Max number of iteraitons (required)
+%      stepsize         Initial stepsize (required)
+%      stepsize_decay   stepsize *= stepsize_decay every iteration (required)
+%      opAopts          Struct for products with measurement operator (required)
+%
+%      y0               Initial y0 (optional, default 0)
+%      explicit         Compute initial point using dense eigendecomposition? (optional, default true)
+%      callback         Callback function taking (y, iter, obj, vmax, prob, opts)
+%                       returns stop = true if solver should exit (optional)
+%      callbackopts     Options struct for callback
+%
+% Output:
+%   y       Solution
+%   track   Struct containing convergence history
+%      obj      Objective value
 
 m = prob.m;
 n = prob.n;
@@ -60,8 +65,13 @@ if ~explicit
 end
 if isfield(opts, 'callback')
     callback = opts.callback;
+    if isfield(opts, 'callbackopts')
+        callbackopts = opts.callbackopts;
+    else
+        callbackopts = struct();
+    end
 else
-    callback = @(y, iter, vmax, prob) false;
+    callback = @(y, iter, vmax, prob, callbackopts) false;
 end
 
 z = zeros(m-1,1);
@@ -86,7 +96,7 @@ for iter = 1:opts.maxiter
     
     opts.stepsize = opts.stepsize*opts.stepsize_decay;
     y = Z*z+ybar;
-    stop = callback(y, iter, objval, vmax, prob);
+    stop = callback(y, iter, objval, vmax, prob, callbackopts);
     
     if stop
         break;

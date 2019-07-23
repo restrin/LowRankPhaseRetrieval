@@ -115,7 +115,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
   if( !strcmp("sample", cmd) )
   {
     double r;
-  	int numsamples = (int) mxGetScalar(prhs[1]);
+    int numsamples = (int) mxGetScalar(prhs[1]);
     plhs[0] = mxCreateDoubleMatrix(numsamples, 1, mxREAL);
     double* k = mxGetPr(plhs[0]);
     for( int i=0; i<numsamples; i++ ) {
